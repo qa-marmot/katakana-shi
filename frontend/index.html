@@ -1,294 +1,324 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>カタカナーシ - オンライン版</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+    ></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+      const { useState, useEffect, useRef } = React;
 
-        function App() {
-            const [screen, setScreen] = useState('join'); // 'join' or 'game'
-            const [roomId, setRoomId] = useState('');
-            const [userName, setUserName] = useState('');
-            const [gameState, setGameState] = useState(null);
-            const [ws, setWs] = useState(null);
-            const [checkText, setCheckText] = useState('');
-            const [checkResult, setCheckResult] = useState(null);
-            const [chatMessages, setChatMessages] = useState([]);
-            const [chatInput, setChatInput] = useState('');
-            const [connected, setConnected] = useState(false);
+      function App() {
+        const [screen, setScreen] = useState("join"); // 'join' or 'game'
+        const [roomId, setRoomId] = useState("");
+        const [userName, setUserName] = useState("");
+        const [gameState, setGameState] = useState(null);
+        const [ws, setWs] = useState(null);
+        const [checkText, setCheckText] = useState("");
+        const [checkResult, setCheckResult] = useState(null);
+        const [chatMessages, setChatMessages] = useState([]);
+        const [chatInput, setChatInput] = useState("");
+        const [connected, setConnected] = useState(false);
 
-            // WebSocket接続URL（環境に応じて変更してください）
-            // ローカル環境: ws://localhost:8000
-            // 本番環境（HTTPSの場合）: wss://your-backend.onrender.com
-            const WS_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                ? 'ws://localhost:8000' 
-                : `wss://${window.location.hostname}`; // 本番環境の場合はwss://を使用
+        const BACKEND_URL = "https://katakana-shi.onrender.com";
 
-            const connectWebSocket = () => {
-                if (!roomId || !userName) return;
+        const WS_URL =
+          window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+            ? "ws://localhost:8000"
+            : `wss://${BACKEND_URL}`;
 
-                const websocket = new WebSocket(`${WS_URL}/ws/${roomId}/${userName}`);
+        const connectWebSocket = () => {
+          if (!roomId || !userName) return;
 
-                websocket.onopen = () => {
-                    console.log('WebSocket接続成功');
-                    setConnected(true);
-                };
+          const websocket = new WebSocket(`${WS_URL}/ws/${roomId}/${userName}`);
 
-                websocket.onmessage = (event) => {
-                    const message = JSON.parse(event.data);
-                    
-                    if (message.type === 'state_update') {
-                        setGameState(message.data);
-                    } else if (message.type === 'katakana_check_result') {
-                        setCheckResult(message.data);
-                    } else if (message.type === 'chat') {
-                        setChatMessages(prev => [...prev, message.data]);
-                    }
-                };
+          websocket.onopen = () => {
+            console.log("WebSocket接続成功");
+            setConnected(true);
+          };
 
-                websocket.onclose = () => {
-                    console.log('WebSocket接続終了');
-                    setConnected(false);
-                };
+          websocket.onmessage = (event) => {
+            const message = JSON.parse(event.data);
 
-                websocket.onerror = (error) => {
-                    console.error('WebSocket エラー:', error);
-                };
-
-                setWs(websocket);
-            };
-
-            useEffect(() => {
-                if (screen === 'game') {
-                    connectWebSocket();
-                }
-
-                return () => {
-                    if (ws) {
-                        ws.close();
-                    }
-                };
-            }, [screen]);
-
-            const handleJoinRoom = (e) => {
-                e.preventDefault();
-                if (roomId && userName) {
-                    setScreen('game');
-                }
-            };
-
-            const handleNextWord = () => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'next_word',
-                        winner: userName
-                    }));
-                }
-            };
-
-            const handleCheckKatakana = () => {
-                if (ws && ws.readyState === WebSocket.OPEN && checkText) {
-                    ws.send(JSON.stringify({
-                        type: 'check_katakana',
-                        text: checkText
-                    }));
-                }
-            };
-
-            const handleSendChat = (e) => {
-                e.preventDefault();
-                if (ws && ws.readyState === WebSocket.OPEN && chatInput.trim()) {
-                    ws.send(JSON.stringify({
-                        type: 'chat',
-                        message: chatInput
-                    }));
-                    setChatInput('');
-                }
-            };
-
-            if (screen === 'join') {
-                return (
-                    <div className="container">
-                        <div className="card">
-                            <h1>🎮 カタカナーシ</h1>
-                            <p className="subtitle">カタカナを使わずにお題を説明しよう!</p>
-                            
-                            <form onSubmit={handleJoinRoom}>
-                                <div className="input-group">
-                                    <label>ルームID</label>
-                                    <input
-                                        type="text"
-                                        placeholder="例: room123"
-                                        value={roomId}
-                                        onChange={(e) => setRoomId(e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                
-                                <div className="input-group">
-                                    <label>ユーザー名</label>
-                                    <input
-                                        type="text"
-                                        placeholder="例: たろう"
-                                        value={userName}
-                                        onChange={(e) => setUserName(e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                
-                                <button type="submit">ルームに参加</button>
-                            </form>
-                        </div>
-                    </div>
-                );
+            if (message.type === "state_update") {
+              setGameState(message.data);
+            } else if (message.type === "katakana_check_result") {
+              setCheckResult(message.data);
+            } else if (message.type === "chat") {
+              setChatMessages((prev) => [...prev, message.data]);
             }
+          };
 
-            if (!gameState) {
-                return (
-                    <div className="container">
-                        <div className="card">
-                            <div className="status">接続中...</div>
-                        </div>
-                    </div>
-                );
+          websocket.onclose = () => {
+            console.log("WebSocket接続終了");
+            setConnected(false);
+          };
+
+          websocket.onerror = (error) => {
+            console.error("WebSocket エラー:", error);
+          };
+
+          setWs(websocket);
+        };
+
+        useEffect(() => {
+          if (screen === "game") {
+            connectWebSocket();
+          }
+
+          return () => {
+            if (ws) {
+              ws.close();
             }
+          };
+        }, [screen]);
 
-            const currentPresenter = gameState.users[gameState.presenter_index];
-            const isPresenter = currentPresenter === userName;
+        const handleJoinRoom = (e) => {
+          e.preventDefault();
+          if (roomId && userName) {
+            setScreen("game");
+          }
+        };
 
-            return (
-                <div className="container">
-                    <div className="card">
-                        <h1>🎮 カタカナーシ</h1>
-                        <p className="subtitle">ルーム: {roomId} | あなた: {userName}</p>
-                        
-                        <div className="presenter-info">
-                            <div className="presenter-label">現在の出題者</div>
-                            <div className="presenter-name">👤 {currentPresenter}</div>
-                        </div>
-
-                        {isPresenter && (
-                            <div className="word-display">
-                                <div className="word-label">あなたのお題</div>
-                                <div className="word">{gameState.current_word}</div>
-                                <div style={{marginTop: '20px', fontSize: '14px', opacity: 0.9}}>
-                                    ⚠️ カタカナを使わずに説明してください！
-                                </div>
-                            </div>
-                        )}
-
-                        {!isPresenter && (
-                            <div className="word-display">
-                                <div className="word">❓</div>
-                                <div style={{marginTop: '20px', fontSize: '18px', opacity: 0.9}}>
-                                    {currentPresenter}さんが説明中...
-                                </div>
-                            </div>
-                        )}
-
-                        <h3 style={{marginTop: '30px', marginBottom: '15px'}}>参加者とスコア</h3>
-                        <div className="users-list">
-                            {gameState.users.map((user, index) => (
-                                <div 
-                                    key={user} 
-                                    className={`user-card ${index === gameState.presenter_index ? 'presenter' : ''}`}
-                                >
-                                    <div className="user-name">
-                                        {index === gameState.presenter_index && '👑 '}
-                                        {user}
-                                    </div>
-                                    <div className="user-score">
-                                        {gameState.scores[user] || 0} pt
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="button-group">
-                            <button onClick={handleNextWord}>
-                                ✅ 正解！次のお題へ
-                            </button>
-                            <button 
-                                className="secondary-btn"
-                                onClick={() => {
-                                    if (ws) ws.close();
-                                    setScreen('join');
-                                    setGameState(null);
-                                }}
-                            >
-                                🚪 退出
-                            </button>
-                        </div>
-
-                        <div className="katakana-checker">
-                            <h3>📝 カタカナチェッカー</h3>
-                            <div className="input-group">
-                                <input
-                                    type="text"
-                                    placeholder="説明文を入力してチェック"
-                                    value={checkText}
-                                    onChange={(e) => setCheckText(e.target.value)}
-                                />
-                            </div>
-                            <button onClick={handleCheckKatakana}>
-                                チェック
-                            </button>
-                            
-                            {checkResult && (
-                                <div className={`check-result ${checkResult.has_katakana ? 'danger' : 'safe'}`}>
-                                    {checkResult.has_katakana 
-                                        ? '❌ カタカナが含まれています！' 
-                                        : '✅ カタカナは含まれていません！'}
-                                </div>
-                            )}
-                        </div>
-
-                        <div style={{marginTop: '30px'}}>
-                            <h3 style={{marginBottom: '10px'}}>💬 チャット</h3>
-                            <div className="chat-area">
-                                {chatMessages.map((msg, index) => (
-                                    <div key={index} className="chat-message">
-                                        <span className="chat-user">{msg.user}:</span>
-                                        <span>{msg.message}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <form onSubmit={handleSendChat} style={{marginTop: '10px'}}>
-                                <div style={{display: 'flex', gap: '10px'}}>
-                                    <input
-                                        type="text"
-                                        placeholder="メッセージを入力..."
-                                        value={chatInput}
-                                        onChange={(e) => setChatInput(e.target.value)}
-                                        style={{flex: 1}}
-                                    />
-                                    <button type="submit" style={{width: 'auto', padding: '12px 20px'}}>
-                                        送信
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-
-                        <div className="status">
-                            {connected ? '🟢 接続中' : '🔴 切断'}
-                        </div>
-                    </div>
-                </div>
+        const handleNextWord = () => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(
+              JSON.stringify({
+                type: "next_word",
+                winner: userName,
+              }),
             );
+          }
+        };
+
+        const handleCheckKatakana = () => {
+          if (ws && ws.readyState === WebSocket.OPEN && checkText) {
+            ws.send(
+              JSON.stringify({
+                type: "check_katakana",
+                text: checkText,
+              }),
+            );
+          }
+        };
+
+        const handleSendChat = (e) => {
+          e.preventDefault();
+          if (ws && ws.readyState === WebSocket.OPEN && chatInput.trim()) {
+            ws.send(
+              JSON.stringify({
+                type: "chat",
+                message: chatInput,
+              }),
+            );
+            setChatInput("");
+          }
+        };
+
+        if (screen === "join") {
+          return (
+            <div className="container">
+              <div className="card">
+                <h1>🎮 カタカナーシ</h1>
+                <p className="subtitle">カタカナを使わずにお題を説明しよう!</p>
+
+                <form onSubmit={handleJoinRoom}>
+                  <div className="input-group">
+                    <label>ルームID</label>
+                    <input
+                      type="text"
+                      placeholder="例: room123"
+                      value={roomId}
+                      onChange={(e) => setRoomId(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label>ユーザー名</label>
+                    <input
+                      type="text"
+                      placeholder="例: たろう"
+                      value={userName}
+                      onChange={(e) => setUserName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <button type="submit">ルームに参加</button>
+                </form>
+              </div>
+            </div>
+          );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        if (!gameState) {
+          return (
+            <div className="container">
+              <div className="card">
+                <div className="status">接続中...</div>
+              </div>
+            </div>
+          );
+        }
+
+        const currentPresenter = gameState.users[gameState.presenter_index];
+        const isPresenter = currentPresenter === userName;
+
+        return (
+          <div className="container">
+            <div className="card">
+              <h1>🎮 カタカナーシ</h1>
+              <p className="subtitle">
+                ルーム: {roomId} | あなた: {userName}
+              </p>
+
+              <div className="presenter-info">
+                <div className="presenter-label">現在の出題者</div>
+                <div className="presenter-name">👤 {currentPresenter}</div>
+              </div>
+
+              {isPresenter && (
+                <div className="word-display">
+                  <div className="word-label">あなたのお題</div>
+                  <div className="word">{gameState.current_word}</div>
+                  <div
+                    style={{
+                      marginTop: "20px",
+                      fontSize: "14px",
+                      opacity: 0.9,
+                    }}
+                  >
+                    ⚠️ カタカナを使わずに説明してください！
+                  </div>
+                </div>
+              )}
+
+              {!isPresenter && (
+                <div className="word-display">
+                  <div className="word">❓</div>
+                  <div
+                    style={{
+                      marginTop: "20px",
+                      fontSize: "18px",
+                      opacity: 0.9,
+                    }}
+                  >
+                    {currentPresenter}さんが説明中...
+                  </div>
+                </div>
+              )}
+
+              <h3 style={{ marginTop: "30px", marginBottom: "15px" }}>
+                参加者とスコア
+              </h3>
+              <div className="users-list">
+                {gameState.users.map((user, index) => (
+                  <div
+                    key={user}
+                    className={`user-card ${index === gameState.presenter_index ? "presenter" : ""}`}
+                  >
+                    <div className="user-name">
+                      {index === gameState.presenter_index && "👑 "}
+                      {user}
+                    </div>
+                    <div className="user-score">
+                      {gameState.scores[user] || 0} pt
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="button-group">
+                <button onClick={handleNextWord}>✅ 正解！次のお題へ</button>
+                <button
+                  className="secondary-btn"
+                  onClick={() => {
+                    if (ws) ws.close();
+                    setScreen("join");
+                    setGameState(null);
+                  }}
+                >
+                  🚪 退出
+                </button>
+              </div>
+
+              <div className="katakana-checker">
+                <h3>📝 カタカナチェッカー</h3>
+                <div className="input-group">
+                  <input
+                    type="text"
+                    placeholder="説明文を入力してチェック"
+                    value={checkText}
+                    onChange={(e) => setCheckText(e.target.value)}
+                  />
+                </div>
+                <button onClick={handleCheckKatakana}>チェック</button>
+
+                {checkResult && (
+                  <div
+                    className={`check-result ${checkResult.has_katakana ? "danger" : "safe"}`}
+                  >
+                    {checkResult.has_katakana
+                      ? "❌ カタカナが含まれています！"
+                      : "✅ カタカナは含まれていません！"}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: "30px" }}>
+                <h3 style={{ marginBottom: "10px" }}>💬 チャット</h3>
+                <div className="chat-area">
+                  {chatMessages.map((msg, index) => (
+                    <div key={index} className="chat-message">
+                      <span className="chat-user">{msg.user}:</span>
+                      <span>{msg.message}</span>
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={handleSendChat} style={{ marginTop: "10px" }}>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <input
+                      type="text"
+                      placeholder="メッセージを入力..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="submit"
+                      style={{ width: "auto", padding: "12px 20px" }}
+                    >
+                      送信
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="status">
+                {connected ? "🟢 接続中" : "🔴 切断"}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
     </script>
-</body>
+  </body>
 </html>
